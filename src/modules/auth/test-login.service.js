@@ -2,7 +2,7 @@ import { webcrypto } from 'node:crypto';
 import { env } from '../../config/environment.js';
 import { admin, createPublicClient } from '../../config/supabase.js';
 import { check, fail } from '../../lib/errors.js';
-import { phoneValue, text } from '../../lib/validation.js';
+import { phoneValue, requireMatchingProfileName, text } from '../../lib/validation.js';
 import { limited } from './login-limits.js';
 export const emailFor = (phone) => `${phone}@phone.gameon.invalid`;
 export async function passwordFor(phone) {
@@ -77,6 +77,6 @@ export async function login(body, req) {
       profile = inserted.data;
     }
   }
-  check(await admin.from('gameon_profiles').update({ name }).eq('id', profile.id));
+  requireMatchingProfileName(profile.name, name);
   return { session: await signIn(phone, password, profile.id) };
 }

@@ -1,3 +1,5 @@
+import { matchScore } from "../modules/matches/scoring.service.js";
+import { playerPerformance } from "../modules/profiles/player-performance.service.js";
 import { teamPoll } from "../modules/teams/team-polls.service.js";
 import {
   inviteTeamPlayer,
@@ -9,6 +11,13 @@ import {
   setMatchAvailability,
   requestMatch,
   reviewMatch,
+  cancelMatch,
+  withdrawMatchRequest,
+  matchConversation,
+  matchInbox,
+  listConfirmedMatches,
+  matchHeadToHead,
+  touchMatchPresence,
 } from "../modules/matches/match.service.js";
 import {
   registerPush,
@@ -47,14 +56,23 @@ import { markSeen } from "../modules/requests/mark-seen.service.js";
 import { changePhone } from "../modules/accounts/change-phone.service.js";
 import { deleteAccount } from "../modules/accounts/delete-account.service.js";
 export const operations = {
+  matchScore,
   teamPoll,
   inviteTeamPlayer,
   requestTeamJoin,
   reviewTeamPlayer,
   searchPlayers,
+  playerPerformance,
   setMatchAvailability,
   requestMatch,
   reviewMatch,
+  cancelMatch,
+  withdrawMatchRequest,
+  matchConversation,
+  matchInbox,
+  listConfirmedMatches,
+  matchHeadToHead,
+  touchMatchPresence,
   registerPush,
   unregisterPush,
   saveProfile,
@@ -107,9 +125,18 @@ export function createApiRouter() {
     ["post", "/teams/players/join", "requestTeamJoin"],
     ["post", "/teams/players/review", "reviewTeamPlayer"],
     ["post", "/teams/players/search", "searchPlayers"],
+    ["post", "/players/performance", "playerPerformance"],
     ["patch", "/me/team/availability", "setMatchAvailability"],
     ["post", "/match-requests", "requestMatch"],
     ["post", "/match-requests/review", "reviewMatch"],
+    ["post", "/match-requests/cancel", "cancelMatch"],
+    ["post", "/match-requests/withdraw", "withdrawMatchRequest"],
+    ["post", "/match-requests/conversation", "matchConversation"],
+    ["post", "/match-requests/inbox", "matchInbox"],
+    ["post", "/match-requests/score", "matchScore"],
+    ["post", "/match-requests/confirmed", "listConfirmedMatches"],
+    ["post", "/match-requests/head-to-head", "matchHeadToHead"],
+    ["post", "/match-requests/presence", "touchMatchPresence"],
     ["patch", "/me/profile", "saveProfile"],
     ["put", "/me/team", "saveTeam"],
     ["post", "/communities", "createCommunity"],

@@ -11,3 +11,9 @@ export const text = (value, min, max, label) => {
     fail(`${label} must have ${min}–${max} characters.`);
   return result;
 };
+
+export function requireMatchingProfileName(savedName, submittedName) {
+  const normalize = (name) => name.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (normalize(savedName) !== normalize(submittedName))
+    fail('Name and mobile number do not match. Enter the name saved on your profile.', 401);
+}

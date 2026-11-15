@@ -94,6 +94,11 @@ export async function snapshot(user) {
     membersByCommunity = {};
   for (const community of communities) {
     const admitted = memberships.filter((m) => m.community_id === community.id);
+    const canPlanMatch =
+      !privileged &&
+      profile.role === "Captain" &&
+      profile.completed &&
+      admitted.some((m) => m.team_id === ownTeam?.id);
     memberCounts[community.id] = admitted.length;
     if (privileged || joined.includes(community.id))
       membersByCommunity[community.id] = admitted.map((m) => {
@@ -107,6 +112,10 @@ export async function snapshot(user) {
           isYou: team?.captain_id === user.id,
           matchAvailable: team?.match_available === true,
           hasGround: team?.has_ground === true,
+          ...(canPlanMatch && team?.has_ground && {
+            groundName: team.ground_name,
+            groundArea: team.ground_area,
+          }),
         };
       });
   }
@@ -150,6 +159,9 @@ export async function snapshot(user) {
       incoming: r.to_team_id === ownTeam?.id,
       status: r.status,
       createdAt: r.created_at,
+      plan: r.plan ?? null,
+      cancellation: r.cancellation ?? null,
+      hasProposal: Boolean(r.proposal),
     })),
     joined,
     memberCounts,

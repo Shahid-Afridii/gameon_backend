@@ -1,7 +1,7 @@
 import { env } from '../../config/environment.js';
 import { admin, createPublicClient } from '../../config/supabase.js';
 import { check, fail } from '../../lib/errors.js';
-import { phoneValue } from '../../lib/validation.js';
+import { phoneValue, requireMatchingProfileName } from '../../lib/validation.js';
 import { limited } from './login-limits.js';
 
 export async function requestOtp(body, req) {
@@ -30,7 +30,7 @@ export async function verifyOtp(body, req) {
   )
     fail('Invalid or expired verification code.', 401);
   // Auth identity is authoritative. Never find/link an account by unverified input.
-  check(
+  const inserted = check(
     await admin.from('gameon_profiles').upsert(
       {
         id: data.user.id,
@@ -39,14 +39,20 @@ export async function verifyOtp(body, req) {
         role: 'Player',
       },
       { onConflict: 'id', ignoreDuplicates: true },
-    ),
+    ).select('name').maybeSingle(),
   );
+  const profile = inserted ?? check(
+    await admin.from('gameon_profiles').select('name').eq('id', data.user.id).single(),
+  );
+  requireMatchingProfileName(profile.name, body.name);
   return { session: data.session };
 }
 export async function refreshSession(body) {
   const { data, error } = await createPublicClient().auth.refreshSession({
     refresh_token: body.refreshToken,
   });
+  if (error && (error.status === 0 || error.status === 429 || error.status >= 500))
+    fail('Session verification is temporarily unavailable. Try again.', 503);
   if (error || !data.session) fail('Session expired. Sign in again.', 401);
   return { session: data.session };
 }

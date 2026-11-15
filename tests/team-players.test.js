@@ -52,6 +52,12 @@ test("player-team schemas reject spoofed senders, malformed IDs and invalid appr
   );
 });
 
+test("career stats accepts PostgreSQL UUIDs used by seeded player profiles", () => {
+  const seededPlayerId = "5c5c5c5c-1111-1111-1111-111111111111";
+  assert.equal(schemas.playerPerformance.safeParse({ playerId: seededPlayerId }).success, true);
+  assert.equal(schemas.playerPerformance.safeParse({ playerId: "not-a-player" }).success, false);
+});
+
 test("team operations pass authenticated actor and reject unauthorized/stale requests before notifications", async () => {
   const originalFrom = admin.from,
     originalRpc = admin.rpc;

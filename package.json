@@ -7,8 +7,8 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/server.js",
-    "dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "start": "node scripts/start-api.cjs",
+    "dev": "node --watch scripts/start-api.cjs",
     "check": "node scripts/check.js",
     "test": "node --test tests/*.test.js",
     "seed:test-logins": "node scripts/run-seed-logins.cjs"
