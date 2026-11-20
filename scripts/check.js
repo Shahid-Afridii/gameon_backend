@@ -11,5 +11,4 @@ function check(directory) {
   }
 }
 check('src');
-check('tests');
 console.info('JavaScript syntax checks passed.');

@@ -25,15 +25,33 @@ export async function saveTeam({ body, user, client }) {
         .filter((v) => typeof v === "string" && v.length <= 60)
         .slice(0, 20)
     : [];
-  check(
-    await client.rpc("gameon_save_team_details", {
+  if (body.teamId === undefined) {
+    check(await client.rpc("gameon_save_team_details", {
       team_name: name,
       team_description: values.description || "",
       owns_ground: values.hasGround,
       venue_name: groundName,
       venue_area: groundArea,
       venue_amenities: amenities,
-    }),
-  );
+    }));
+  } else {
+    await manageTeam(user.id, body.teamId, {
+      name, description: values.description || "", hasGround: values.hasGround,
+      groundName, groundArea, amenities,
+    });
+  }
+  return { snapshot: await snapshot(user) };
+}
+
+async function manageTeam(actor, teamId, details) {
+  const result = await admin.rpc("gameon_manage_captain_team", {
+    actor, target_team: teamId, details,
+  });
+  if (result.error?.code === "P0001") fail(result.error.message, 409);
+  return check(result);
+}
+
+export async function selectCaptainTeam({ user, body }) {
+  await manageTeam(user.id, body.teamId, null);
   return { snapshot: await snapshot(user) };
 }

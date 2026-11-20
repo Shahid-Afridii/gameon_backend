@@ -1,6 +1,6 @@
 import { admin } from "../../config/supabase.js";
 import { check, fail } from "../../lib/errors.js";
-import { scoringAccess, updateScore } from "./scoring.engine.js";
+import { isFixtureCaptain, scoringAccess, updateScore } from "./scoring.engine.js";
 
 function scoreResult(result) {
   if (result.error?.code === "42501") fail(result.error.message, 403);
@@ -14,6 +14,21 @@ export async function matchScore({ user, body }) {
     ...scoreResult(await admin.rpc("gameon_read_match_score", identity)),
     actorId: user.id,
   };
+  const setup = !match.state?.innings.length;
+  if (match.isCaptain && setup) {
+    const manual = await admin.from("gameon_manual_players")
+      .select("id,team_id,name,cricket_role,jersey_number")
+      .in("team_id", match.teams.map(({ id }) => id)).is("linked_player_id", null)
+      .order("name").order("id");
+    if (!["42P01", "PGRST205"].includes(manual.error?.code)) {
+      for (const player of check(manual)) {
+        match.teams.find(({ id }) => id === player.team_id).roster.push({
+          id: player.id, name: player.name, cricketRole: player.cricket_role,
+          jerseyNumber: player.jersey_number, manual: true,
+        });
+      }
+    }
+  }
   // Presence is an enhancement: a missing/outdated viewer migration must never block scoring.
   const viewerPresence = await admin.rpc("gameon_touch_score_viewer", identity);
   const viewerCount = viewerPresence.error ? 1 : viewerPresence.data;
@@ -22,10 +37,11 @@ export async function matchScore({ user, body }) {
     isCaptain: match.isCaptain,
     overs: match.overs,
     viewerCount,
+    supportsMatchRestart: true,
     teams: match.teams.map(({ id, name, captainId, roster }) => ({
       id, name, captainId,
       captainName: roster.find((player) => player.id === captainId)?.name ?? null,
-      ...(match.isCaptain && id === match.ownTeamId ? { roster } : {}),
+      ...(match.isCaptain && (setup || id === match.ownTeamId) ? { roster } : {}),
     })),
   };
   const playerDetails = new Map(match.teams.flatMap(({ roster }) =>
@@ -40,9 +56,13 @@ export async function matchScore({ user, body }) {
       teamId,
       eleven.map((player) => ({ ...player, ...playerDetails.get(player.id) })),
     ]));
+    const { restart, ...publicState } = state ?? {};
     return {
       ...visible,
-      state: state && { ...state, lineups },
+      state: state && { ...publicState, lineups },
+      ...(restart && isFixtureCaptain(match) ? {
+        restart: { undoUntil: restart.undoUntil, serverNow: Date.now() },
+      } : {}),
       revision,
       access: scoringAccess(match, state),
     };

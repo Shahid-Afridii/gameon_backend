@@ -10,7 +10,7 @@ export const check = ({ data, error }) => {
     if (error.code === '23505')
       fail('This record already exists. Check the name or try refreshing.');
     if (error.code === '42501') fail('You do not have permission for this action.', 403);
-    if (error.code === 'PGRST202' || error.code === '42P01' || error.code === '42703')
+    if (error.code === 'PGRST202' || error.code === 'PGRST205' || error.code === '42P01' || error.code === '42703')
       fail('Run the latest GameOn SQL migrations in Supabase first.', 503);
     fail('Database operation failed. Check your setup and try again.');
   }

@@ -2,6 +2,12 @@
 
 Independent Node.js + JavaScript API for GameOn's current community product. Express 5, Supabase Auth/Postgres, versioned HTTP routes, strict Zod input validation, database RLS and transactional RPCs. No frontend imports, no TypeScript, no server started by importing `app.js`.
 
+## Local development
+
+Use the existing Supabase project URL, publishable key and server-only key in `backend/.env.local`. Local and deployed API writes affect the same data when they share a project. Start with `cp -n .env.example .env.local`. If using static test login, configure development-only codes, an auth secret and allowed test phone numbers in that file.
+
+Run `npm run dev` from the backend folder. This command uses only the local configuration and listens on port `4001`. Verify `http://localhost:4001/health/ready` before testing login. Railway starts the API with `npm start` and its own environment variables. Keep both env files out of Git.
+
 This folder is a standalone backend project with its own package.json, environment file and Railway configuration. Its intended location is `sportsapp/backend`, alongside `sportsapp/frontend`. Run all commands below inside `sportsapp/backend`. Frontend integration has deliberately not been changed.
 
 ## 1. Install (does not start the app)
@@ -39,7 +45,16 @@ Run these complete files in order, one at a time:
 2. `supabase/migrations/202610300002_login_limits.sql`
 3. `supabase/migrations/202611050001_backend_api_support.sql`
 
+For a new database, apply the rest of the files in `supabase/migrations/` in filename order. For an existing database, apply only migrations not already run.
+
 If files 1 and 2 were already applied from the frontend project, run only file 3. Reapplying file 1 requires immediately reapplying file 2 because file 2 tightens profile grants. File 3 adds verified phone synchronization and an atomic team-save function; it does not delete existing data. These SQL files have NOT been run on your remote Supabase project, and the new migration has not been exercised against a live database here. Keep RLS enabled. The previous Edge Function is not needed by this backend; leave it in place until frontend integration is tested, then remove the obsolete deployment so two backend implementations do not drift.
+
+### Availability alerts
+
+If **Notify** fails with a SQL migration error, open the Supabase project used by the running API and run `supabase/migrations/202611200008_availability_alert_setup.sql` in SQL Editor. This restores the availability watch table and both RPCs without replacing the community leaderboard or clearing existing watches. It also refreshes the API schema cache.
+
+The alert RPCs use `gameon_active_captain_team` from `supabase/migrations/202611190002_multiple_captain_teams.sql` and `gameon_match_action` from the match migrations. Apply any missing prerequisites in order before testing. To verify delivery, tap **Notify** for an unavailable opposing team, then turn on match availability as that team's captain. The watching captain needs a registered device with push enabled.
+
 
 ### Real phone OTP
 
@@ -84,7 +99,6 @@ Use the test admin code on subsequent login after manually assigning the role. R
 
 ```sh
 npm run check
-npm test
 ```
 
 No app or server was started during this implementation. When you want to start the backend yourself:
@@ -93,7 +107,7 @@ No app or server was started during this implementation. When you want to start 
 npm run dev
 ```
 
-Liveness: `GET http://localhost:4000/health/live`. Database readiness: `GET http://localhost:4000/health/ready`. Readiness must return 200 before accepting traffic. It probes database access, not every migration or Auth provider; validate each workflow in a staging project as well.
+Local liveness is `GET http://localhost:4001/health/live` and readiness is `GET http://localhost:4001/health/ready`. Readiness checks database access. Test feature flows against the development project to verify its migrations and Auth setup.
 
 ## 5. Railway
 
@@ -124,7 +138,6 @@ For a private static-code prototype deployment, explicitly use `NODE_ENV=develop
 | `src/modules/snapshot/`    | App-compatible private state projection                                     |
 | `src/lib/`                 | Shared database errors, input helpers, bounded directory reads              |
 | `supabase/migrations/`     | Reviewed SQL to apply manually                                              |
-| `tests/`                   | Authentication, authorization and input boundary checks                     |
 
 Feature files use explicit names such as `save-team.service.js` and `review-request.service.js`. Route handlers handle HTTP; services handle use cases; Postgres handles atomic invariants. User-scoped clients retain RLS for writes. Service-role access is confined to trusted identity/projection operations with explicit ownership checks. No empty architectural layers or placeholder business features are included.
 

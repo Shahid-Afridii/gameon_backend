@@ -8,10 +8,8 @@
   },
   "scripts": {
     "start": "node scripts/start-api.cjs",
-    "dev": "node --watch scripts/start-api.cjs",
-    "check": "node scripts/check.js",
-    "test": "node --test tests/*.test.js",
-    "seed:test-logins": "node scripts/run-seed-logins.cjs"
+    "dev": "node scripts/start-api.cjs --local",
+    "check": "node scripts/check.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.57.0",

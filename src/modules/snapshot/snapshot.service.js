@@ -31,17 +31,16 @@ export async function snapshot(user) {
     requests = check(requestsResult),
     memberships = check(membershipsResult),
     profiles = check(profilesResult);
-  const ownTeam = teams.find((t) => t.captain_id === user.id);
-  const matchResults = ownTeam
-    ? await Promise.all([
-        readAll("gameon_match_requests", "*", "id", {
-          from_team_id: ownTeam.id,
-        }),
-        readAll("gameon_match_requests", "*", "id", { to_team_id: ownTeam.id }),
-      ])
-    : [];
-  const matchRequests = matchResults
-    .flatMap((result) => check(result))
+  const captainTeams = teams.filter((team) => team.captain_id === user.id)
+    .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id.localeCompare(b.id));
+  const ownTeam = captainTeams.find(({ id }) => id === profile.active_team_id) ?? captainTeams[0];
+  const captainTeamIds = new Set(captainTeams.map(({ id }) => id));
+  const matchResults = await Promise.all(captainTeams.flatMap(({ id }) => [
+    readAll("gameon_match_requests", "*", "id", { from_team_id: id }),
+    readAll("gameon_match_requests", "*", "id", { to_team_id: id }),
+  ]));
+  const matchRequests = [...new Map(matchResults.flatMap((result) => check(result))
+    .map((request) => [request.id, request])).values()]
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const teamPlayers = check(
     await readAll("gameon_team_players", "*", "team_id"),
@@ -50,22 +49,34 @@ export async function snapshot(user) {
     .filter((row) => row.player_id === user.id)
     .map((row) => row.team_id);
   const myTeamIds = new Set([
-    ...(ownTeam ? [ownTeam.id] : []),
+    ...captainTeamIds,
     ...playerTeamIds,
   ]);
+  let manualPlayers = [];
+  if (myTeamIds.size) {
+    // Scope this private roster query to the user's own teams and omit phone numbers.
+    for (const teamId of myTeamIds) {
+      try {
+        const rows = await readAll("gameon_manual_players",
+          "id,team_id,name,cricket_role,jersey_number,linked_player_id,invite_requested_at",
+          "id", { team_id: teamId });
+        manualPlayers.push(...check(rows).filter((row) => !row.linked_player_id));
+      } catch (error) {
+        if (error.status !== 503 || !error.message.includes("SQL migrations")) throw error;
+      }
+    }
+  }
+  if (profile.role === "Player") {
+    const claimed = await admin.rpc("gameon_claim_manual_invites", { actor: user.id });
+    if (claimed.error?.code !== "PGRST202") check(claimed);
+  }
   const visiblePolls = check(await readAll('gameon_team_polls', 'id,team_id,closes_at', 'id'));
   const openPollCount = visiblePolls.filter(poll =>
     (privileged || myTeamIds.has(poll.team_id)) && Date.parse(poll.closes_at) > Date.now()
   ).length;
   const playerRequestResults = await Promise.all([
     readAll("gameon_team_player_requests", "*", "id", { player_id: user.id }),
-    ...(ownTeam
-      ? [
-          readAll("gameon_team_player_requests", "*", "id", {
-            team_id: ownTeam.id,
-          }),
-        ]
-      : []),
+    ...captainTeams.map(({ id }) => readAll("gameon_team_player_requests", "*", "id", { team_id: id })),
   ]);
   const playerRequests = [
     ...new Map(
@@ -77,7 +88,7 @@ export async function snapshot(user) {
   const joined = [
     ...new Set(
       memberships
-        .filter((m) => myTeamIds.has(m.team_id))
+        .filter((m) => ownTeam ? m.team_id === ownTeam.id : myTeamIds.has(m.team_id))
         .map((m) => m.community_id),
     ),
   ];
@@ -156,7 +167,7 @@ export async function snapshot(user) {
       toTeamId: r.to_team_id,
       fromTeam: teams.find((t) => t.id === r.from_team_id)?.name || "Team",
       toTeam: teams.find((t) => t.id === r.to_team_id)?.name || "Team",
-      incoming: r.to_team_id === ownTeam?.id,
+      incoming: captainTeamIds.has(r.to_team_id),
       status: r.status,
       createdAt: r.created_at,
       plan: r.plan ?? null,
@@ -173,6 +184,11 @@ export async function snapshot(user) {
       .map((t) => ({
         ...teamSummary(t),
         isCaptain: t.captain_id === user.id,
+        ...(t.captain_id === user.id && {
+          groundName: t.ground_name,
+          groundArea: t.ground_area,
+          amenities: t.amenities,
+        }),
         roster: [
           {
             id: t.captain_id,
@@ -211,6 +227,11 @@ export async function snapshot(user) {
                   : []),
               isYou: row.player_id === user.id,
             })),
+          ...manualPlayers.filter((row) => row.team_id === t.id).map((row) => ({
+            id: row.id, name: row.name, role: "Player", manual: true,
+            cricketRole: row.cricket_role, jerseyNumber: row.jersey_number,
+            ...(t.captain_id === user.id && { invitationSaved: Boolean(row.invite_requested_at) }),
+          })),
         ],
       })),
     teamPlayerRequests: playerRequests.map((r) => {
@@ -252,7 +273,7 @@ export async function snapshot(user) {
       tagline: "",
       illustration: "cricket",
     })),
-    joinRequests: requests.map((r) => ({
+    joinRequests: requests.filter((r) => privileged || !ownTeam || r.team_id === ownTeam.id).map((r) => ({
       id: r.id,
       communityId: r.community_id,
       teamId: r.team_id,

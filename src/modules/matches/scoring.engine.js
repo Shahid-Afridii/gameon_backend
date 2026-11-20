@@ -68,17 +68,55 @@ export function scoringAccess(match, state) {
   };
 }
 
-export function updateScore(match, action) {
-  const { state, ownTeamId } = match;
+export function isFixtureCaptain(match) {
+  return match.teams.some(({ id, captainId }) =>
+    id === match.ownTeamId && captainId === match.actorId
+  );
+}
+
+export function updateScore(match, action, now = Date.now()) {
+  const { ownTeamId } = match;
+  let { state } = match;
+  if (action.kind === "restartMatch" || action.kind === "undoRestart") {
+    if (!isFixtureCaptain(match)) fail("Only the match captains can restart or restore this match.", 403);
+    if (action.kind === "undoRestart") {
+      if (!state?.restart?.previous || now >= state.restart.undoUntil)
+        fail("The two-minute window has expired. The previous score can no longer be restored.", 409);
+      return state.restart.previous;
+    }
+
+    if (!state?.innings.length || state.result ||
+        (state.innings.length === 2 && inningsComplete(state, state.innings[1])))
+      fail("Only a match in progress can be restarted.", 409);
+    if (state.restart?.undoUntil > now)
+      fail("Wait for the current restart window to end before restarting again.", 409);
+
+    const previous = { ...state };
+    delete previous.restart;
+    return {
+      lineups: state.lineups,
+      innings: [],
+      restart: { undoUntil: now + 120_000, previous },
+    };
+  }
+  if (state?.restart?.previous && now >= state.restart.undoUntil) {
+    state = { ...state, restart: { undoUntil: state.restart.undoUntil } };
+  }
   if (state?.result) fail("This match has already ended.", 409);
   if (action.kind === "lineup") {
     if (!match.isCaptain) fail("Only the team captain can save the playing XI.", 403);
     if (state?.innings.length) fail("The playing XI is locked once scoring starts.", 409);
-    const team = match.teams.find(({ id }) => id === ownTeamId);
-    const eleven = team.roster.filter(({ id }) => action.players.includes(id));
-    if (eleven.length !== 11) fail("Choose 11 different players from your team.");
+    const team = match.teams.find(({ id }) => id === (action.teamId ?? ownTeamId));
+    if (!team) fail("Choose one of the teams playing this match.");
+    const roster = new Map(team.roster.map((player) => [player.id, player]));
+    const eleven = action.players.map((id) => roster.get(id));
+    if (action.players.length !== 11 || new Set(action.players).size !== 11 || eleven.some((player) => !player))
+      fail(team.id === ownTeamId
+        ? "Choose 11 different players from your team."
+        : "Choose 11 different players from the selected team.");
     return {
-      lineups: { ...state?.lineups, [ownTeamId]: eleven },
+      ...state,
+      lineups: { ...state?.lineups, [team.id]: eleven },
       innings: [],
     };
   }
@@ -87,7 +125,7 @@ export function updateScore(match, action) {
     if (!match.isCaptain) fail("Only the captains can set up the match toss.", 403);
     if (state?.innings.length) fail("This match has already started.", 409);
     if (!match.teams.every(({ id }) => state?.lineups[id]?.length === 11))
-      fail("Both captains must save their playing XI first.");
+      fail("Both captains’ teams must have a saved playing XI before the toss.");
 
     const captain = match.teams.find(({ id }) => id === ownTeamId)
       ?.roster.find(({ id }) => id === match.actorId);
@@ -192,7 +230,7 @@ export function updateScore(match, action) {
     if (chasing && (ownTeamId !== current.teamId || complete))
       fail("Your team no longer has an innings to score.", 409);
     const team = match.teams.find(({ id }) => id === ownTeamId);
-    if (!team.roster.some(({ id }) => id === action.playerId))
+    if (!team.roster.some(({ id, manual }) => id === action.playerId && !manual))
       fail("Choose a scorer from your own team.");
     return {
       ...state,

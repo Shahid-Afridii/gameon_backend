@@ -83,7 +83,31 @@ const action =
         : {}),
     };
   };
-export const setMatchAvailability = action("availability");
+export async function setMatchAvailability({ user, body }) {
+  if (await isAdmin(user.id))
+    fail("Only team captains can manage match requests.", 403);
+  const result = await admin.rpc("gameon_set_availability_and_collect_watches", {
+    actor: user.id,
+    payload: body,
+  });
+  if (result.error?.code === "PGRST202")
+    return action("availability")({ user, body });
+  if (result.error?.code === "P0001") fail(result.error.message, 409);
+  const { recipients, teamName } = check(result);
+  const watchersByCommunity = new Map();
+  for (const { userId, communityId } of recipients) {
+    if (!watchersByCommunity.has(communityId)) watchersByCommunity.set(communityId, []);
+    watchersByCommunity.get(communityId).push(userId);
+  }
+  await Promise.all(
+    [...watchersByCommunity].map(([communityId, userIds]) => notifyUsers(userIds, {
+      title: "Team available for a match",
+      body: `${teamName} is now accepting match invitations.`,
+      data: { type: "team-available", communityId },
+    })),
+  );
+  return { snapshot: await snapshot(user) };
+}
 export const requestMatch = action("request_with_plan");
 export const reviewMatch = action("review");
 

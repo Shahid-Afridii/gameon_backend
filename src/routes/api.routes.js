@@ -1,7 +1,11 @@
+import { communityDashboard, communityMatchWaves, watchTeamAvailability } from "../modules/communities/community-dashboard.service.js";
 import { matchScore } from "../modules/matches/scoring.service.js";
 import { playerPerformance } from "../modules/profiles/player-performance.service.js";
 import { teamPoll } from "../modules/teams/team-polls.service.js";
 import {
+  addManualTeamPlayer,
+  inviteManualTeamPlayer,
+  teamStats,
   inviteTeamPlayer,
   requestTeamJoin,
   reviewTeamPlayer,
@@ -47,7 +51,7 @@ import {
 } from "../modules/auth/auth.service.js";
 import { snapshot } from "../modules/snapshot/snapshot.service.js";
 import { saveProfile } from "../modules/profiles/save-profile.service.js";
-import { saveTeam } from "../modules/teams/save-team.service.js";
+import { saveTeam, selectCaptainTeam } from "../modules/teams/save-team.service.js";
 import { createCommunity } from "../modules/communities/create-community.service.js";
 import { leaveCommunity } from "../modules/communities/leave-community.service.js";
 import { requestJoin } from "../modules/requests/request-join.service.js";
@@ -56,8 +60,14 @@ import { markSeen } from "../modules/requests/mark-seen.service.js";
 import { changePhone } from "../modules/accounts/change-phone.service.js";
 import { deleteAccount } from "../modules/accounts/delete-account.service.js";
 export const operations = {
+  communityDashboard,
+  communityMatchWaves,
+  watchTeamAvailability,
   matchScore,
   teamPoll,
+  addManualTeamPlayer,
+  inviteManualTeamPlayer,
+  teamStats,
   inviteTeamPlayer,
   requestTeamJoin,
   reviewTeamPlayer,
@@ -77,6 +87,7 @@ export const operations = {
   unregisterPush,
   saveProfile,
   saveTeam,
+  selectCaptainTeam,
   createCommunity,
   leaveCommunity,
   requestJoin,
@@ -121,6 +132,9 @@ export function createApiRouter() {
     res.json(await snapshot(req.identity.user)),
   );
   const routes = [
+    ["post", "/teams/players/manual", "addManualTeamPlayer"],
+    ["post", "/teams/players/manual/invite", "inviteManualTeamPlayer"],
+    ["post", "/teams/stats", "teamStats"],
     ["post", "/teams/players/invite", "inviteTeamPlayer"],
     ["post", "/teams/players/join", "requestTeamJoin"],
     ["post", "/teams/players/review", "reviewTeamPlayer"],
@@ -139,7 +153,11 @@ export function createApiRouter() {
     ["post", "/match-requests/presence", "touchMatchPresence"],
     ["patch", "/me/profile", "saveProfile"],
     ["put", "/me/team", "saveTeam"],
+    ["post", "/me/team/select", "selectCaptainTeam"],
     ["post", "/communities", "createCommunity"],
+    ["post", "/communities/dashboard", "communityDashboard"],
+    ["post", "/communities/match-waves", "communityMatchWaves"],
+    ["post", "/communities/watch-availability", "watchTeamAvailability"],
     ["post", "/join-requests", "requestJoin"],
     ["post", "/join-requests/review", "reviewRequest"],
     ["post", "/join-requests/seen", "markSeen"],

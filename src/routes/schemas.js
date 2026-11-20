@@ -35,7 +35,7 @@ const scoreFixture = { requestId: uuid, matchIndex: z.number().int().min(0).max(
 // Seeded player IDs are PostgreSQL UUIDs without RFC version and variant bits.
 const rosterPlayerId = z.guid();
 const scoreChange = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("lineup"), players: z.array(rosterPlayerId).length(11) }),
+  z.strictObject({ kind: z.literal("lineup"), teamId: rosterPlayerId.optional(), players: z.array(rosterPlayerId).length(11) }),
   z.discriminatedUnion("method", [
     z.strictObject({ kind: z.literal("toss"), method: z.literal("coin"), headsTeamId: uuid }),
     z.strictObject({ kind: z.literal("toss"), method: z.literal("manual"), winnerTeamId: uuid }),
@@ -60,6 +60,8 @@ const scoreChange = z.discriminatedUnion("kind", [
   }),
   z.strictObject({ kind: z.literal("undo"), deliveryIndex: z.number().int().nonnegative().optional() }),
   z.strictObject({ kind: z.literal("nextInnings") }),
+  z.strictObject({ kind: z.literal("restartMatch") }),
+  z.strictObject({ kind: z.literal("undoRestart") }),
   z.strictObject({ kind: z.literal("endAsDraw"), reason: z.enum(["rain", "other"]) }),
   z.strictObject({ kind: z.literal("endMatch"), reason: z.enum(["completed", "weather", "other"]) }),
   z.strictObject({ kind: z.literal("assignScorer"), playerId: rosterPlayerId }),
@@ -83,6 +85,14 @@ export const schemas = {
     if (value.operation === 'create' && (!value.title || !value.matchDate)) ctx.addIssue({code: 'custom', message: 'Add a title and match date.'});
     if (value.operation === 'vote' && (!value.pollId || !value.answer)) ctx.addIssue({code: 'custom', message: 'Choose Yes or No.'});
   }),
+  addManualTeamPlayer: z.strictObject({
+    teamId: uuid,
+    name,
+    cricketRole: z.enum(["Batsman", "Bowler", "All-rounder", "Wicketkeeper-batsman"]).nullable(),
+    jerseyNumber: z.number().int().min(0).max(99).nullable(),
+  }),
+  inviteManualTeamPlayer: z.strictObject({ playerId: rosterPlayerId, phone }),
+  teamStats: z.strictObject({ teamId: uuid }),
   inviteTeamPlayer: z.strictObject({ teamId: uuid, playerId: uuid }),
   requestTeamJoin: z.strictObject({ teamId: uuid }),
   reviewTeamPlayer: z.strictObject({
@@ -92,9 +102,13 @@ export const schemas = {
   searchPlayers: z.strictObject({ query: z.string().trim().min(2).max(60) }),
   // Seeded cricket profiles are valid PostgreSQL UUIDs but may not carry RFC version bits.
   playerPerformance: z.strictObject({ playerId: rosterPlayerId }),
-  setMatchAvailability: z.strictObject({ available: z.boolean() }),
+  communityDashboard: z.strictObject({ communityId: uuid }),
+  communityMatchWaves: z.strictObject({ communityId: uuid, date: z.iso.date().nullable().optional() }),
+  watchTeamAvailability: z.strictObject({ communityId: uuid, teamId: uuid, watching: z.boolean() }),
+  setMatchAvailability: z.strictObject({ available: z.boolean(), sourceTeamId: uuid.optional() }),
   requestMatch: z.strictObject({
     communityId: uuid,
+    sourceTeamId: uuid.optional(),
     teamId: uuid,
     plan: z.strictObject({
       ...matchDetails,
@@ -145,7 +159,9 @@ export const schemas = {
       ballType: ballType.nullable().default(null),
     }),
   }),
+  selectCaptainTeam: z.strictObject({ teamId: uuid }),
   saveTeam: z.strictObject({
+    teamId: uuid.nullable().optional(),
     values: z.strictObject({
       name,
       description: optionalText(600),
@@ -164,13 +180,15 @@ export const schemas = {
       category: z.enum(["Corporate", "Local"]),
     }),
   }),
-  requestJoin: z.strictObject({ communityId: uuid, accepted: z.literal(true) }),
+  requestJoin: z.strictObject({
+    sourceTeamId: uuid.optional(), communityId: uuid, accepted: z.literal(true),
+  }),
   reviewRequest: z.strictObject({
     requestId: uuid,
     decision: z.enum(["approved", "rejected"]),
   }),
   markSeen: z.strictObject({ communityId: uuid.nullable().optional() }),
-  leaveCommunity: z.strictObject({ communityId: uuid }),
+  leaveCommunity: z.strictObject({ communityId: uuid, sourceTeamId: uuid.optional() }),
   changePhone: z.strictObject({ phone, code }),
   deleteAccount: empty,
 };

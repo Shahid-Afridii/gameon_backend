@@ -7,6 +7,8 @@ coverage/
 .DS_Store
 .tests
 
-# Local-only database drafts and test suites
-/supabase/migrations/
+# Local Supabase state and test data
+/supabase/.temp/
+/supabase/.branches/
+/supabase/seeds/
 /tests/
